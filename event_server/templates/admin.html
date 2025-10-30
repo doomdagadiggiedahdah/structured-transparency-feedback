@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Panel - Structured Transparency</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h2 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 18px;
+        }
+        h3 {
+            margin-top: 15px;
+            margin-bottom: 10px;
+            color: #555;
+            font-size: 14px;
+        }
+        button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0052a3;
+        }
+        button.danger {
+            background: #d32f2f;
+        }
+        button.danger:hover {
+            background: #b71c1c;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        .question-item {
+            background: #f9f9f9;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border-left: 3px solid #0066cc;
+        }
+        .question-item input {
+            margin-bottom: 8px;
+        }
+        .question-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        .question-buttons button {
+            flex: 1;
+            padding: 6px 10px;
+            font-size: 12px;
+        }
+        .share-link {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            word-break: break-all;
+            font-size: 12px;
+        }
+        .qr-code {
+            text-align: center;
+            margin: 15px 0;
+        }
+        .qr-code img {
+            max-width: 200px;
+            border: 1px solid #ddd;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        .status.active {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+        .status.closed {
+            background: #ffccbc;
+            color: #d84315;
+        }
+        .expire-input {
+            display: flex;
+            gap: 5px;
+        }
+        .expire-input input {
+            flex: 1;
+            margin: 0;
+        }
+        .expire-input button {
+            margin: 0;
+        }
+        .feedback-item {
+            background: #f9f9f9;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            border-left: 3px solid #4caf50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- LEFT PANEL: Share Link & Questions -->
+        <div class="card">
+            <h2>Share Link</h2>
+            <div id="status" class="status active">Data collection: ACTIVE</div>
+            <div class="share-link" id="shareLink">Loading...</div>
+            <div class="qr-code">
+                <img id="qrCode" src="" alt="QR Code">
+            </div>
+            
+            <h3>Questions</h3>
+            <div id="questionsList"></div>
+            <button onclick="addQuestion()">+ Add Question</button>
+            <button onclick="updateQuestions()" style="margin-top: 10px; width: 100%; background: #4caf50;">Update Questions</button>
+            
+            <h3>Expire Time</h3>
+            <div class="expire-input">
+                <input type="number" id="expireMinutes" placeholder="Minutes" min="1" value="30">
+                <button onclick="setExpireTime()">Set</button>
+            </div>
+            <p id="expireDisplay" style="font-size: 12px; color: #666; margin-top: 5px;"></p>
+            
+            <button class="danger" onclick="closeCollection()" style="margin-top: 20px; width: 100%;">Close Data Collection</button>
+        </div>
+
+        <!-- RIGHT PANEL: Feedback -->
+        <div class="card">
+            <h2>Feedback & Responses</h2>
+            <div id="feedbackList" style="max-height: 500px; overflow-y: auto;">
+                <p style="color: #999; font-size: 14px;">Responses will appear here...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SESSION_ID = "{{ session_id }}";
+        
+        function generateShareLink() {
+            const baseUrl = window.location.origin;
+            return baseUrl + "/participant?session=" + SESSION_ID;
+        }
+
+        function generateQRCode() {
+            const shareLink = generateShareLink();
+            const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(shareLink);
+            document.getElementById("qrCode").src = qrUrl;
+        }
+
+        function loadState() {
+            fetch("/api/state")
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById("shareLink").textContent = generateShareLink();
+                    document.getElementById("status").textContent = data.is_collecting ? "Data collection: ACTIVE" : "Data collection: CLOSED";
+                    document.getElementById("status").className = data.is_collecting ? "status active" : "status closed";
+                    
+                    renderQuestions(data.questions);
+                    renderFeedback(data.feedback);
+                    
+                    if (data.expire_time) {
+                        const expireDate = new Date(data.expire_time);
+                        const now = new Date();
+                        const minutes = Math.round((expireDate - now) / 60000);
+                        document.getElementById("expireDisplay").textContent = "Expires in: " + (minutes > 0 ? minutes + " minutes" : "Expired");
+                    }
+                });
+        }
+
+        function renderQuestions(questions) {
+            const list = document.getElementById("questionsList");
+            if (questions.length === 0) {
+                list.innerHTML = "<p style='color: #999; font-size: 13px;'>No questions yet</p>";
+                return;
+            }
+            list.innerHTML = questions.map((q, idx) => `
+                <div class="question-item">
+                    <input type="text" value="${q}" onchange="updateQuestionAt(${idx}, this.value)">
+                    <div class="question-buttons">
+                        <button onclick="deleteQuestion(${idx})">Delete</button>
+                    </div>
+                </div>
+            `).join("");
+        }
+
+        function renderFeedback(feedback) {
+            const list = document.getElementById("feedbackList");
+            if (feedback.length === 0) {
+                list.innerHTML = "<p style='color: #999; font-size: 14px;'>No responses yet</p>";
+                return;
+            }
+            list.innerHTML = feedback.map(f => `
+                <div class="feedback-item">
+                    <strong>Q: ${f.question}</strong><br>
+                    A: ${f.answer}
+                </div>
+            `).join("");
+        }
+
+        function addQuestion() {
+            const questions = Array.from(document.querySelectorAll("#questionsList input")).map(i => i.value);
+            questions.push("");
+            fetch("/api/questions", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({questions})
+            }).then(() => loadState());
+        }
+
+        function deleteQuestion(idx) {
+            const questions = Array.from(document.querySelectorAll("#questionsList input")).map(i => i.value);
+            questions.splice(idx, 1);
+            fetch("/api/questions", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({questions})
+            }).then(() => loadState());
+        }
+
+        function updateQuestionAt(idx, value) {
+            const questions = Array.from(document.querySelectorAll("#questionsList input")).map(i => i.value);
+            questions[idx] = value;
+            // Don't save yet, just update local state
+        }
+
+        function updateQuestions() {
+            const questions = Array.from(document.querySelectorAll("#questionsList input")).map(i => i.value).filter(q => q.trim());
+            fetch("/api/questions", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({questions})
+            }).then(() => {
+                alert("Questions updated!");
+                loadState();
+            });
+        }
+
+        function setExpireTime() {
+            const minutes = parseInt(document.getElementById("expireMinutes").value);
+            if (!minutes || minutes < 1) {
+                alert("Please enter a valid number of minutes");
+                return;
+            }
+            fetch("/api/expire-time", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({minutes})
+            }).then(() => loadState());
+        }
+
+        function closeCollection() {
+            if (confirm("Close data collection? Participants will no longer be able to submit responses.")) {
+                fetch("/api/close-collection", {method: "POST"})
+                    .then(() => loadState());
+            }
+        }
+
+        // Load state on page load and refresh every 2 seconds
+        generateQRCode();
+        loadState();
+        setInterval(loadState, 2000);
+    </script>
+</body>
+</html>

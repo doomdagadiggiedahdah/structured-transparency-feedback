@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Audio Transcription</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        h2 {
+            color: #333;
+            font-size: 16px;
+            margin-bottom: 15px;
+            margin-top: 20px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #recordBtn {
+            background: #667eea;
+            color: white;
+        }
+
+        #recordBtn:hover:not(:disabled) {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        #recordBtn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        #stopBtn {
+            background: #f56565;
+            color: white;
+            display: none;
+        }
+
+        #stopBtn:hover:not(:disabled) {
+            background: #e53e3e;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(245, 101, 101, 0.4);
+        }
+
+        #downloadBtn {
+            background: #48bb78;
+            color: white;
+            display: none;
+        }
+
+        #downloadBtn:hover:not(:disabled) {
+            background: #38a169;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(72, 187, 120, 0.4);
+        }
+
+        #downloadBtn:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+        }
+
+        .status {
+            background: #f7fafc;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+        }
+
+        .status.recording {
+            border-left-color: #f56565;
+            background: #fff5f5;
+        }
+
+        .status.transcribing {
+            border-left-color: #ecc94b;
+            background: #fffff0;
+        }
+
+        .status.complete {
+            border-left-color: #48bb78;
+            background: #f0fff4;
+        }
+
+        .status-text {
+            color: #333;
+            font-size: 14px;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #ccc;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #transcript {
+            width: 100%;
+            min-height: 200px;
+            padding: 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+            color: #333;
+            background: #f9fafb;
+        }
+
+        #transcript:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border-left: 4px solid #c53030;
+        }
+
+        .info {
+            color: #718096;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .question-display {
+            background: #f0f4ff;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            font-size: 18px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .question-counter {
+            color: #667eea;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+
+        .progress {
+            background: #e2e8f0;
+            height: 4px;
+            border-radius: 2px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            background: #48bb78;
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ Edge Patagonia Interview</h1>
+        <p class="subtitle">Record your reflections</p>
+
+        <div id="error" class="error hidden"></div>
+
+        <div id="status" class="status">
+            <span class="status-text">Ready to record</span>
+        </div>
+
+        <div class="question-counter"><span id="questionNum">1</span> / <span id="questionTotal">4</span></div>
+        <div class="progress">
+            <div id="progressBar" class="progress-bar" style="width: 0%"></div>
+        </div>
+
+        <div id="questionDisplay" class="question-display">
+            <span id="questionText"></span>
+        </div>
+
+        <div class="controls">
+            <button id="recordBtn">🎙️ Start Recording</button>
+            <button id="stopBtn">⏹️ Stop Recording</button>
+            <button id="downloadBtn" style="display: none;">➡️ Next</button>
+            <button id="exportBtn" style="display: none;">⬇️ Export</button>
+        </div>
+
+        <p class="info">All processing happens locally in your browser.</p>
+        
+        <a id="downloadLink" style="display: none;"></a>
+    </div>
+
+    <script type="module">
+        // Recording state
+        let mediaRecorder;
+        let audioChunks = [];
+        let audioBlob;
+        let mediaStream;
+        let worker;
+
+        // Hardcoded questions for Edge Patagonia
+        const EDGE_QUESTIONS = [
+            "What was your favorite moment or experience from today?",
+            "What was the most challenging or frustrating part of your day?",
+            "Which interaction or conversation stood out to you the most?",
+            "What's one thing you'd like to see or experience differently at Edge next year?"
+        ];
+
+        // Questions state
+        let questions = [];
+        let currentIndex = 0;
+
+        // Elements
+        const recordBtn = document.getElementById('recordBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const nextBtn = document.getElementById('downloadBtn'); // repurposed as Next button
+        const exportBtn = document.getElementById('exportBtn');
+        const status = document.getElementById('status');
+        const errorDiv = document.getElementById('error');
+        const questionTextEl = document.getElementById('questionText');
+        const questionNumEl = document.getElementById('questionNum');
+        const questionTotalEl = document.getElementById('questionTotal');
+        const progressBarEl = document.getElementById('progressBar');
+
+        function updateStatus(message, type = 'default') {
+            status.className = `status ${type}`;
+            status.innerHTML = `<span class="status-text">${message}</span>`;
+            if (type === 'transcribing') {
+                status.innerHTML = `<span class="spinner"></span><span class="status-text">${message}</span>`;
+            }
+        }
+
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => errorDiv.classList.add('hidden'), 5000);
+        }
+
+        function updateCounters() {
+            const total = questions.length;
+            const index = total ? currentIndex + 1 : 0;
+            questionNumEl.textContent = String(index);
+            questionTotalEl.textContent = String(total);
+            const completed = questions.filter(q => q.answer && q.answer.length > 0).length;
+            const pct = total ? Math.round((completed / total) * 100) : 0;
+            progressBarEl.style.width = `${pct}%`;
+        }
+
+        function updateQuestionDisplay() {
+            if (questions.length === 0) {
+                questionTextEl.textContent = 'Add questions to get started';
+                recordBtn.disabled = true;
+                nextBtn.style.display = 'none';
+                exportBtn.style.display = 'none';
+            } else {
+                recordBtn.disabled = false;
+                const q = questions[currentIndex];
+                questionTextEl.textContent = q.text;
+                if (q.answer && q.answer.length > 0) {
+                    nextBtn.style.display = 'flex';
+                } else {
+                    nextBtn.style.display = 'none';
+                }
+                exportBtn.style.display = areAllAnswered() ? 'flex' : 'none';
+            }
+            updateCounters();
+            updateNextButtonLabel();
+        }
+
+        function updateNextButtonLabel() {
+            if (questions.length === 0) return;
+            if (currentIndex < questions.length - 1) {
+                nextBtn.textContent = '📋 Next Question';
+            } else {
+                nextBtn.textContent = '✅ Finish';
+            }
+        }
+
+        function areAllAnswered() {
+            return questions.length > 0 && questions.every(q => q.answer && q.answer.length > 0);
+        }
+
+
+        // Initialize with hardcoded questions
+        function initializeQuestions() {
+            questions = EDGE_QUESTIONS.map((text, idx) => ({
+                id: idx,
+                text,
+                answer: ''
+            }));
+            currentIndex = 0;
+            updateQuestionDisplay();
+        }
+
+        // Initialize Web Worker
+        worker = new Worker('/static/worker.js', { type: 'module' });
+        worker.onmessage = (e) => {
+            if (e.data.type === 'init_complete') {
+                if (e.data.success) {
+                    updateStatus('✓ Model loaded', 'complete');
+                    setTimeout(() => updateStatus('Ready to record', 'default'), 1000);
+                } else {
+                    showError(`Failed to load model: ${e.data.error}`);
+                }
+            } else if (e.data.type === 'transcribe_complete') {
+                if (e.data.error) {
+                    showError(`Transcription error: ${e.data.error}`);
+                } else {
+                    const text = e.data.text || '';
+                    if (questions.length && questions[e.data.qIndex] !== undefined) {
+                        questions[e.data.qIndex].answer = text;
+                    }
+                    exportBtn.style.display = areAllAnswered() ? 'flex' : 'none';
+                }
+                updateStatus('Ready to record', 'default');
+            }
+        };
+
+        // Initialize questions and start loading model
+        initializeQuestions();
+        worker.postMessage({ type: 'init' });
+
+        recordBtn.addEventListener('click', async () => {
+            try {
+                // Check if getUserMedia is available
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    showError('Microphone access requires HTTPS. Please access this page via https:// instead of http://');
+                    return;
+                }
+                
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(mediaStream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (e) => {
+                    audioChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    transcribeAudio(); // fire and forget
+                };
+
+                mediaRecorder.start();
+                recordBtn.style.display = 'none';
+                stopBtn.style.display = 'flex';
+                nextBtn.style.display = 'none';
+                updateStatus('🔴 Recording...', 'recording');
+            } catch (err) {
+                showError(`Microphone access denied: ${err.message}`);
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            mediaRecorder.stop();
+            mediaStream.getTracks().forEach(track => track.stop());
+            recordBtn.style.display = 'flex';
+            stopBtn.style.display = 'none';
+            nextBtn.style.display = 'flex'; // show next button immediately
+            updateStatus('Transcribing in background...', 'transcribing');
+        });
+
+        async function transcribeAudio() {
+            const qIndex = currentIndex; // capture the question index at time of recording
+            try {
+                const arrayBuffer = await audioBlob.arrayBuffer();
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+                const sampleRate = audioBuffer.sampleRate;
+                const numberOfChannels = audioBuffer.numberOfChannels;
+                const length = audioBuffer.length * (16000 / sampleRate);
+                const offlineContext = new OfflineAudioContext(numberOfChannels, length, 16000);
+                const source = offlineContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(offlineContext.destination);
+                source.start(0);
+                const resampledBuffer = await offlineContext.startRendering();
+                const audioData = resampledBuffer.getChannelData(0);
+
+                worker.postMessage({ type: 'transcribe', audioData, qIndex });
+            } catch (err) {
+                showError(`Audio processing error: ${err.message}`);
+                updateStatus('Error processing audio', 'default');
+            }
+        }
+
+        nextBtn.addEventListener('click', () => {
+            if (currentIndex < questions.length - 1) {
+                currentIndex += 1;
+                nextBtn.style.display = 'none';
+                updateQuestionDisplay();
+            } else {
+                // finished - show export, hide next
+                nextBtn.style.display = 'none';
+                exportBtn.style.display = 'flex';
+            }
+        });
+
+        exportBtn.addEventListener('click', () => {
+            const pairs = questions.map(q => ({ question: q.text, answer: q.answer || '' }));
+            const json = JSON.stringify({ items: pairs }, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const downloadLink = document.getElementById('downloadLink');
+            downloadLink.href = url;
+            downloadLink.download = `qa-${Date.now()}.json`;
+            downloadLink.click();
+            URL.revokeObjectURL(url);
+        });
+
+    </script>
+</body>
+</html>
