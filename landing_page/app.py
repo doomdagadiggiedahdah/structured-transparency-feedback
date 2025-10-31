@@ -463,7 +463,7 @@ def create_session():
         logger.info(f"Container {container.id} created for session {session_id}")
         
         # Construct admin URL using public IP
-        admin_url = f"https://struct.lol:{port}/"
+        admin_url = f"https://struct.lol:{port + 1000}/"
         
         return render_template_string(
             confirmation_html,
