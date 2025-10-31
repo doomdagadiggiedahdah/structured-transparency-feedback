@@ -1,4 +1,4 @@
 """Event server package for structured transparency sessions."""
-from event_server.app import create_app
+from event_server.app import app
 
-__all__ = ["create_app"]
+__all__ = ["app"]
