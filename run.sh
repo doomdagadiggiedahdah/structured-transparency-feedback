@@ -20,6 +20,17 @@ docker run -d \
   --name landing \
   landing-page
 
+# Start event server on port 5001
+echo "Starting event server..."
+cd /home/ubuntu/structured-transparency
+source .venv/bin/activate 2>/dev/null || true
+
+# Kill any existing event_server processes
+pkill -f "gunicorn.*event_server" 2>/dev/null || true
+
+# Start event server on port 5001
+gunicorn -w 4 -b 0.0.0.0:5001 event_server.app:app --daemon
+
 # Run nginx with SSL using host network to access all ports
 echo "Starting nginx with SSL on host network..."
 docker run -d \
@@ -30,9 +41,12 @@ docker run -d \
   nginx:alpine
 
 echo ""
-echo "✓ Landing page running behind nginx with SSL"
+echo "✓ Landing page running on port 5000"
+echo "✓ Event server running on port 5001"
+echo "✓ Nginx with SSL proxying requests"
 echo "✓ HTTP (port 80) redirects to HTTPS"
 echo "✓ HTTPS available on port 443"
+echo "✓ /federated/* routes to event server"
 echo "✓ Session ports 8000-9000 available with SSL"
 echo ""
 docker ps
