@@ -267,6 +267,7 @@
         let audioBlob;
         let mediaStream;
         let worker;
+        let workerReady = false;
 
         // Hardcoded questions for Edge Patagonia
         const EDGE_QUESTIONS = [
@@ -367,6 +368,7 @@
         worker.onmessage = (e) => {
             if (e.data.type === 'init_complete') {
                 if (e.data.success) {
+                    workerReady = true;
                     updateStatus('✓ Model loaded', 'complete');
                     setTimeout(() => updateStatus('Ready to record', 'default'), 1000);
                 } else {
@@ -432,6 +434,22 @@
 
         async function transcribeAudio() {
             const qIndex = currentIndex; // capture the question index at time of recording
+            
+            // Wait for worker to be ready
+            if (!workerReady) {
+                console.warn('Worker not ready yet, waiting...');
+                updateStatus('Waiting for model to load...', 'transcribing');
+                // Poll until worker is ready (max 30 seconds)
+                for (let i = 0; i < 60; i++) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    if (workerReady) break;
+                }
+                if (!workerReady) {
+                    showError('Transcription service not ready. Please refresh the page.');
+                    return;
+                }
+            }
+            
             try {
                 const arrayBuffer = await audioBlob.arrayBuffer();
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -471,16 +489,35 @@
             const pairs = questions.map(q => ({ question: q.text, answer: q.answer || '' }));
             const json = JSON.stringify({ items: pairs }, null, 2);
             
-            // Mobile-friendly approach: use data URI instead of blob
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(json);
-            
-            // Create a temporary link and trigger immediate download
-            const downloadAnchorNode = document.createElement('a');
-            downloadAnchorNode.setAttribute("href", dataStr);
-            downloadAnchorNode.setAttribute("download", `qa-${Date.now()}.json`);
-            document.body.appendChild(downloadAnchorNode); // Required for Firefox
-            downloadAnchorNode.click();
-            downloadAnchorNode.remove();
+            // Try blob approach first (works on most browsers)
+            try {
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                // Create and click download link
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = 'qa-' + Date.now() + '.json';
+                document.body.appendChild(a);
+                a.click();
+                
+                // Cleanup
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+            } catch (e) {
+                // Fallback for browsers that don't support blob
+                console.error('Blob download failed, using data URI:', e);
+                const dataStr = "data:application/json;charset=utf-8," + encodeURIComponent(json);
+                const a = document.createElement('a');
+                a.href = dataStr;
+                a.download = 'qa-' + Date.now() + '.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
         });
 
     </script>
