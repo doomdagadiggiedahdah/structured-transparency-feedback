@@ -470,13 +470,17 @@
         exportBtn.addEventListener('click', () => {
             const pairs = questions.map(q => ({ question: q.text, answer: q.answer || '' }));
             const json = JSON.stringify({ items: pairs }, null, 2);
-            const blob = new Blob([json], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const downloadLink = document.getElementById('downloadLink');
-            downloadLink.href = url;
-            downloadLink.download = `qa-${Date.now()}.json`;
-            downloadLink.click();
-            URL.revokeObjectURL(url);
+            
+            // Mobile-friendly approach: use data URI instead of blob
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(json);
+            
+            // Create a temporary link and trigger immediate download
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", `qa-${Date.now()}.json`);
+            document.body.appendChild(downloadAnchorNode); // Required for Firefox
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
         });
 
     </script>

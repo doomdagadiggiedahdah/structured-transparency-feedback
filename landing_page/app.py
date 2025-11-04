@@ -449,7 +449,7 @@ def create_session():
         
         # Spawn event server container
         container = client.containers.run(
-            "event-server:latest",
+            "session-server:latest",
             name=f"session-{session_id}",
             ports={'5000/tcp': port},
             environment={
@@ -472,7 +472,7 @@ def create_session():
         )
         
     except docker.errors.ImageNotFound:
-        logger.error("event-server:latest image not found")
+        logger.error("session-server:latest image not found")
         return render_template_string(
             error_html,
             error_message="Event server image not found. Please build it first."
