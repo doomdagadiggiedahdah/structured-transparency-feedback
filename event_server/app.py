@@ -15,8 +15,7 @@ session_state = {
     "feedback": []
 }
 
-admin_html = """
-<!DOCTYPE html>
+admin_html = """<!DOCTYPE html>
 <html>
 <head>
     <title>Admin Panel - Structured Transparency</title>
@@ -161,7 +160,10 @@ admin_html = """
             
             <h3>Questions</h3>
             <div id="questionsList"></div>
-            <button onclick="addQuestion()">+ Add Question</button>
+            <div style="margin-top: 10px;">
+                <input type="text" id="newQuestionInput" placeholder="Type new question here..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 8px;">
+                <button onclick="addQuestion()" style="width: 100%;">+ Add Question</button>
+            </div>
             <button onclick="updateQuestions()" style="margin-top: 10px; width: 100%; background: #4caf50;">Update Questions</button>
             
             <h3>Expire Time</h3>
@@ -187,7 +189,7 @@ admin_html = """
         const SESSION_ID = "{{ session_id }}";
         
         function generateShareLink() {
-            const baseUrl = 'https://struct.lol:' + window.location.port;
+            const baseUrl = window.location.origin;
             return baseUrl + "/participant?session=" + SESSION_ID;
         }
 
@@ -219,6 +221,15 @@ admin_html = """
 
         function renderQuestions(questions) {
             const list = document.getElementById("questionsList");
+            
+            // Get current values to preserve user input
+            const currentInputs = Array.from(document.querySelectorAll("#questionsList input")).map(i => i.value);
+            
+            // Only update if questions actually changed
+            if (JSON.stringify(currentInputs) === JSON.stringify(questions)) {
+                return; // No change, skip re-render to preserve focus/selection
+            }
+            
             if (questions.length === 0) {
                 list.innerHTML = "<p style='color: #999; font-size: 13px;'>No questions yet</p>";
                 return;
@@ -248,13 +259,25 @@ admin_html = """
         }
 
         function addQuestion() {
+            const newQuestionInput = document.getElementById("newQuestionInput");
+            const newQuestion = newQuestionInput.value.trim();
+            
+            if (!newQuestion) {
+                alert("Please enter a question");
+                return;
+            }
+            
             const questions = Array.from(document.querySelectorAll("#questionsList input")).map(i => i.value);
-            questions.push("");
+            questions.push(newQuestion);
+            
             fetch("/api/questions", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({questions})
-            }).then(() => loadState());
+            }).then(() => {
+                newQuestionInput.value = "";  // Clear input after adding
+                loadState();
+            });
         }
 
         function deleteQuestion(idx) {
@@ -311,8 +334,7 @@ admin_html = """
         setInterval(loadState, 2000);
     </script>
 </body>
-</html>
-"""
+</html>"""
 
 participant_html = """
 <!DOCTYPE html>
