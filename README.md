@@ -83,4 +83,5 @@ PORT=8001 python -m landing_page.app
 
 ### Landing Page
 - GET / - Landing page
-- POST /create-session - Create new session (TODO: spawn event-server container)
+- POST /create-session - Create new session (spawns event-server container)
+- GET /health - Health check

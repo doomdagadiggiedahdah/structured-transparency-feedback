@@ -13,6 +13,6 @@ def landing():
 @bp.route("/create-session", methods=["POST"])
 def create_session():
     """Create a new transparency session."""
-    # TODO: Spawn Docker container for new session
-    # For now, just show confirmation
+    # Note: Docker container spawning is implemented in app.py
+    # This routes file is kept for reference; actual implementation is in app.py
     return render_template("confirmation.html")
