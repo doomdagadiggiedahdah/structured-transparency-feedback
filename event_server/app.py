@@ -17,6 +17,8 @@ admin_html = """<!DOCTYPE html>
 <html>
 <head>
     <title>Admin Panel - Structured Transparency</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -153,7 +155,7 @@ admin_html = """<!DOCTYPE html>
             <div id="status" class="status active">Data collection: ACTIVE</div>
             <div class="share-link" id="shareLink">Loading...</div>
             <div class="qr-code">
-                <img id="qrCode" src="" alt="QR Code">
+                <div id="qrCode"></div>
             </div>
             
             <h3>Questions</h3>
@@ -171,7 +173,7 @@ admin_html = """<!DOCTYPE html>
             </div>
             <p id="expireDisplay" style="font-size: 12px; color: #666; margin-top: 5px;"></p>
             
-            <button class="danger" onclick="closeCollection()" style="margin-top: 20px; width: 100%;">Close Data Collection</button>
+            <button class="danger" onclick="closeCollection()" style="margin-top: 20px; width: 100%;">Close & Generate Report</button>
         </div>
 
         <!-- RIGHT PANEL: Feedback -->
@@ -179,6 +181,24 @@ admin_html = """<!DOCTYPE html>
             <h2>Feedback & Responses</h2>
             <div id="feedbackList" style="max-height: 500px; overflow-y: auto;">
                 <p style="color: #999; font-size: 14px;">Responses will appear here...</p>
+            </div>
+        </div>
+
+        <!-- FULL WIDTH: AI Generated Report -->
+        <div class="card" id="reportCard" style="grid-column: 1 / -1; display: none;">
+            <h2>📊 AI Generated Report</h2>
+            <div id="reportContent" style="
+                background: #f9f9f9;
+                padding: 20px;
+                border-radius: 4px;
+                border-left: 4px solid #0066cc;
+                white-space: pre-wrap;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                line-height: 1.6;
+                max-height: 600px;
+                overflow-y: auto;
+            ">
+                <p style="color: #999;">Report will appear here after generation...</p>
             </div>
         </div>
     </div>
@@ -193,8 +213,13 @@ admin_html = """<!DOCTYPE html>
 
         function generateQRCode() {
             const shareLink = generateShareLink();
-            const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(shareLink);
-            document.getElementById("qrCode").src = qrUrl;
+            const qrContainer = document.getElementById("qrCode");
+            qrContainer.innerHTML = ""; // Clear previous QR code
+            new QRCode(qrContainer, {
+                text: shareLink,
+                width: 200,
+                height: 200
+            });
         }
 
         function loadState() {
@@ -207,6 +232,14 @@ admin_html = """<!DOCTYPE html>
                     
                     renderQuestions(data.questions);
                     renderFeedback(data.feedback);
+                    
+                    // Show report if it exists
+                    if (data.generated_report) {
+                        document.getElementById("reportCard").style.display = "block";
+                        document.getElementById("reportContent").innerHTML = marked.parse(data.generated_report);
+                    } else {
+                        document.getElementById("reportCard").style.display = "none";
+                    }
                     
                     if (data.expire_time) {
                         const expireDate = new Date(data.expire_time);
@@ -248,12 +281,16 @@ admin_html = """<!DOCTYPE html>
                 list.innerHTML = "<p style='color: #999; font-size: 14px;'>No responses yet</p>";
                 return;
             }
-            list.innerHTML = feedback.map(f => `
-                <div class="feedback-item">
-                    <strong>Q: ${f.question}</strong><br>
-                    A: ${f.answer}
+            list.innerHTML = `
+                <div class="feedback-item" style="text-align: center; padding: 30px;">
+                    <div style="font-size: 48px; font-weight: bold; color: #0066cc; margin-bottom: 10px;">
+                        ${feedback.length}
+                    </div>
+                    <div style="font-size: 18px; color: #666;">
+                        ${feedback.length === 1 ? 'response' : 'responses'} received
+                    </div>
                 </div>
-            `).join("");
+            `;
         }
 
         function addQuestion() {
@@ -319,10 +356,41 @@ admin_html = """<!DOCTYPE html>
             }).then(() => loadState());
         }
 
-        function closeCollection() {
-            if (confirm("Close data collection? Participants will no longer be able to submit responses.")) {
-                fetch("/api/close-collection", {method: "POST"})
-                    .then(() => loadState());
+        async function closeCollection() {
+            if (!confirm("Close data collection and generate AI report? Participants will no longer be able to submit responses.")) {
+                return;
+            }
+            
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = "Closing collection...";
+            btn.style.cursor = "wait";
+            
+            try {
+                // Close collection
+                await fetch("/api/close-collection", {method: "POST"});
+                
+                // Update button to show generating
+                btn.textContent = "🤖 Generating AI report...";
+                
+                // Generate report
+                const response = await fetch("/api/generate-report", {method: "POST"});
+                const data = await response.json();
+                
+                if (data.success) {
+                    btn.textContent = "✓ Report Generated!";
+                    btn.style.background = "#4caf50";
+                } else {
+                    btn.textContent = "Error: " + (data.error || "Unknown");
+                    btn.style.background = "#f44336";
+                }
+                
+                loadState();
+            } catch (error) {
+                btn.textContent = "Error: " + error.message;
+                btn.style.background = "#f44336";
+                btn.disabled = false;
             }
         }
 

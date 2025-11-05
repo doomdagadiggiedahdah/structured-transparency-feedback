@@ -17,6 +17,7 @@ docker run -d \
   -p 5000:5000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e PUBLIC_IP=52.3.6.242 \
+  -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
   --name landing \
   landing-page
 
@@ -29,7 +30,7 @@ source .venv/bin/activate 2>/dev/null || true
 pkill -f "gunicorn.*event_server" 2>/dev/null || true
 
 # Start event server on port 5001
-gunicorn -w 4 -b 0.0.0.0:5001 event_server.app:app --daemon
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" gunicorn -w 1 -b 0.0.0.0:5001 event_server.app:app --daemon
 
 # Run nginx with SSL using host network to access all ports
 echo "Starting nginx with SSL on host network..."

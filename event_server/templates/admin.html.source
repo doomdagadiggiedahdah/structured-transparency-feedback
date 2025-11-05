@@ -156,7 +156,7 @@
             </div>
             <p id="expireDisplay" style="font-size: 12px; color: #666; margin-top: 5px;"></p>
             
-            <button class="danger" onclick="closeCollection()" style="margin-top: 20px; width: 100%;">Close Data Collection</button>
+            <button class="danger" onclick="closeCollection()" style="margin-top: 20px; width: 100%;">Close & Generate Report</button>
         </div>
 
         <!-- RIGHT PANEL: Feedback -->
@@ -164,6 +164,24 @@
             <h2>Feedback & Responses</h2>
             <div id="feedbackList" style="max-height: 500px; overflow-y: auto;">
                 <p style="color: #999; font-size: 14px;">Responses will appear here...</p>
+            </div>
+        </div>
+
+        <!-- FULL WIDTH: AI Generated Report -->
+        <div class="card" id="reportCard" style="grid-column: 1 / -1; display: none;">
+            <h2>📊 AI Generated Report</h2>
+            <div id="reportContent" style="
+                background: #f9f9f9;
+                padding: 20px;
+                border-radius: 4px;
+                border-left: 4px solid #0066cc;
+                white-space: pre-wrap;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                line-height: 1.6;
+                max-height: 600px;
+                overflow-y: auto;
+            ">
+                <p style="color: #999;">Report will appear here after generation...</p>
             </div>
         </div>
     </div>
@@ -192,6 +210,14 @@
                     
                     renderQuestions(data.questions);
                     renderFeedback(data.feedback);
+                    
+                    // Show report if it exists
+                    if (data.generated_report) {
+                        document.getElementById("reportCard").style.display = "block";
+                        document.getElementById("reportContent").textContent = data.generated_report;
+                    } else {
+                        document.getElementById("reportCard").style.display = "none";
+                    }
                     
                     if (data.expire_time) {
                         const expireDate = new Date(data.expire_time);
@@ -233,12 +259,16 @@
                 list.innerHTML = "<p style='color: #999; font-size: 14px;'>No responses yet</p>";
                 return;
             }
-            list.innerHTML = feedback.map(f => `
-                <div class="feedback-item">
-                    <strong>Q: ${f.question}</strong><br>
-                    A: ${f.answer}
+            list.innerHTML = `
+                <div class="feedback-item" style="text-align: center; padding: 30px;">
+                    <div style="font-size: 48px; font-weight: bold; color: #0066cc; margin-bottom: 10px;">
+                        ${feedback.length}
+                    </div>
+                    <div style="font-size: 18px; color: #666;">
+                        ${feedback.length === 1 ? 'response' : 'responses'} received
+                    </div>
                 </div>
-            `).join("");
+            `;
         }
 
         function addQuestion() {
@@ -304,10 +334,38 @@
             }).then(() => loadState());
         }
 
-        function closeCollection() {
-            if (confirm("Close data collection? Participants will no longer be able to submit responses.")) {
-                fetch("/api/close-collection", {method: "POST"})
-                    .then(() => loadState());
+        async function closeCollection() {
+            if (!confirm("Close data collection and generate AI report? Participants will no longer be able to submit responses.")) {
+                return;
+            }
+            
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = "Generating report...";
+            btn.style.cursor = "wait";
+            
+            try {
+                // Close collection
+                await fetch("/api/close-collection", {method: "POST"});
+                
+                // Generate report
+                const response = await fetch("/api/generate-report", {method: "POST"});
+                const data = await response.json();
+                
+                if (data.success) {
+                    btn.textContent = "✓ Report Generated!";
+                    btn.style.background = "#4caf50";
+                } else {
+                    btn.textContent = "Error: " + (data.error || "Unknown");
+                    btn.style.background = "#f44336";
+                }
+                
+                loadState();
+            } catch (error) {
+                btn.textContent = "Error: " + error.message;
+                btn.style.background = "#f44336";
+                btn.disabled = false;
             }
         }
 

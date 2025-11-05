@@ -454,7 +454,8 @@ def create_session():
             ports={'5000/tcp': port},
             environment={
                 'SESSION_ID': session_id,
-                'PORT': '5000'
+                'PORT': '5000',
+                'ANTHROPIC_API_KEY': os.environ.get('ANTHROPIC_API_KEY', ''),
             },
             detach=True,
             remove=False

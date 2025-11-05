@@ -252,7 +252,7 @@
             <button id="recordBtn">🎙️ Start Recording</button>
             <button id="stopBtn">⏹️ Stop Recording</button>
             <button id="downloadBtn" style="display: none;">➡️ Next</button>
-            <button id="exportBtn" style="display: none;">⬇️ Export</button>
+            <button id="exportBtn" style="display: none;">📤 Download and Share Data</button>
         </div>
 
         <p class="info">All processing happens locally in your browser.</p>
@@ -523,6 +523,13 @@
                 
                 if (response.ok) {
                     console.log('✅ Feedback submitted to server successfully');
+                    // Show success message
+                    exportBtn.textContent = "✅ Shared & Downloaded!";
+                    exportBtn.style.background = "#4caf50";
+                    setTimeout(() => {
+                        exportBtn.textContent = "📤 Download and Share Data";
+                        exportBtn.style.background = "";
+                    }, 3000);
                 } else {
                     console.error('⚠️ Failed to submit feedback to server:', await response.text());
                 }
