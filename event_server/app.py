@@ -1,4 +1,6 @@
 from flask import Flask, send_from_directory, render_template_string, render_template, request, jsonify
+from event_server.models import SessionData
+from event_server.llm import generate_report
 from datetime import datetime, timedelta
 import json
 import os
@@ -6,14 +8,10 @@ import uuid
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
-# Session state stored in memory (in production, use a database)
-session_state = {
-    "session_id": os.environ.get("SESSION_ID", "test-session-" + str(uuid.uuid4())[:8]),
-    "questions": [],
-    "is_collecting": True,
-    "expire_time": None,
-    "feedback": []
-}
+# Session data stored in memory (dies when container stops)
+session_data = SessionData(
+    session_id=os.environ.get("SESSION_ID", "test-session-" + str(uuid.uuid4())[:8])
+)
 
 admin_html = """<!DOCTYPE html>
 <html>
@@ -478,52 +476,79 @@ participant_html = """
 
 @app.route("/")
 def admin():
-    return render_template_string(admin_html, session_id=session_state["session_id"])
+    return render_template_string(admin_html, session_id=session_data.session_id)
 
 @app.route("/participant")
 def participant():
-    return render_template("participant.html", session_id=session_state["session_id"])
+    return render_template("participant.html", session_id=session_data.session_id)
 
 @app.route("/api/state")
 def get_state():
-    return jsonify(session_state)
+    return jsonify(session_data.to_dict())
 
 @app.route("/api/questions", methods=["POST"])
 def update_questions():
     data = request.json
-    session_state["questions"] = [q for q in data.get("questions", []) if q.strip()]
+    session_data.questions = [q for q in data.get("questions", []) if q.strip()]
     return jsonify({"success": True})
 
 @app.route("/api/expire-time", methods=["POST"])
 def set_expire_time():
     data = request.json
     minutes = data.get("minutes", 30)
-    session_state["expire_time"] = (datetime.now() + timedelta(minutes=minutes)).isoformat()
+    session_data.expire_time = datetime.now() + timedelta(minutes=minutes)
     return jsonify({"success": True})
 
 @app.route("/api/close-collection", methods=["POST"])
 def close_collection():
-    session_state["is_collecting"] = False
+    session_data.is_collecting = False
     return jsonify({"success": True})
 
 @app.route("/api/submit-feedback", methods=["POST"])
 def submit_feedback():
-    if not session_state["is_collecting"]:
+    if not session_data.is_collecting:
         return jsonify({"success": False, "error": "Data collection is closed"}), 400
     
     data = request.json
-    answers = data.get("answers", [])
-    questions = session_state["questions"]
     
-    for q, a in zip(questions, answers):
-        if a.strip():
-            session_state["feedback"].append({
-                "question": q,
-                "answer": a,
-                "timestamp": datetime.now().isoformat()
-            })
+    # Support two formats:
+    # 1. New: {"items": [{"question": "Q", "answer": "A"}, ...]}
+    # 2. Old: {"answers": ["A1", "A2", ...]} (uses session_data.questions)
+    if "items" in data:
+        # New format: direct question+answer pairs
+        for item in data["items"]:
+            if item.get("answer"):  # Only add if answer is not empty
+                session_data.feedback.append({
+                    "question": item.get("question", ""),
+                    "answer": item["answer"],
+                    "timestamp": datetime.now().isoformat(),
+                })
+    else:
+        # Old format: just answers (use existing questions)
+        answers = data.get("answers", [])
+        session_data.add_feedback(answers)
     
     return jsonify({"success": True})
+
+@app.route("/api/generate-report", methods=["POST"])
+def generate_report_endpoint():
+    """Generate a report from collected feedback using LLM."""
+    try:
+        if not session_data.feedback:
+            return jsonify({"success": False, "error": "No feedback collected yet"}), 400
+        
+        # Generate report using LLM
+        report = generate_report(session_data.feedback)
+        session_data.generated_report = report
+        
+        return jsonify({
+            "success": True,
+            "report": report
+        })
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Failed to generate report: {str(e)}"}), 500
 
 @app.route("/health")
 def health():

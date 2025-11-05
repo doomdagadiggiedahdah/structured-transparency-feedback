@@ -4,10 +4,11 @@ WORKDIR /app
 
 # Copy the entire project structure
 COPY pyproject.toml ./
+COPY README.md ./
 COPY event_server/ ./event_server/
 
-# Install dependencies
-RUN pip install --no-cache-dir flask gunicorn
+# Install dependencies using pyproject.toml
+RUN pip install --no-cache-dir -e .
 
 EXPOSE 5000
 

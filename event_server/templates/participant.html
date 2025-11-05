@@ -349,15 +349,35 @@
         }
 
 
-        // Initialize with hardcoded questions
-        function initializeQuestions() {
-            questions = EDGE_QUESTIONS.map((text, idx) => ({
-                id: idx,
-                text,
-                answer: ''
-            }));
-            currentIndex = 0;
-            updateQuestionDisplay();
+        // Fetch questions from server
+        async function initializeQuestions() {
+            try {
+                const response = await fetch('/api/state');
+                const state = await response.json();
+                
+                // Use server questions if available, fallback to hardcoded
+                const questionTexts = state.questions && state.questions.length > 0 
+                    ? state.questions 
+                    : EDGE_QUESTIONS;
+                
+                questions = questionTexts.map((text, idx) => ({
+                    id: idx,
+                    text,
+                    answer: ''
+                }));
+                currentIndex = 0;
+                updateQuestionDisplay();
+            } catch (error) {
+                console.error('Failed to fetch questions, using defaults:', error);
+                // Fallback to hardcoded
+                questions = EDGE_QUESTIONS.map((text, idx) => ({
+                    id: idx,
+                    text,
+                    answer: ''
+                }));
+                currentIndex = 0;
+                updateQuestionDisplay();
+            }
         }
 
         // Initialize Web Worker
@@ -482,7 +502,35 @@
             }
         });
 
-        exportBtn.addEventListener('click', () => {
+        exportBtn.addEventListener('click', async () => {
+            // First, submit to server
+            try {
+                // Send question+answer pairs directly
+                const items = questions
+                    .filter(q => q.answer && q.answer.trim())
+                    .map(q => ({
+                        question: q.text,
+                        answer: q.answer
+                    }));
+                
+                const response = await fetch('/api/submit-feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ items })
+                });
+                
+                if (response.ok) {
+                    console.log('✅ Feedback submitted to server successfully');
+                } else {
+                    console.error('⚠️ Failed to submit feedback to server:', await response.text());
+                }
+            } catch (error) {
+                console.error('⚠️ Error submitting feedback to server:', error);
+            }
+            
+            // Then, download locally as backup
             const pairs = questions.map(q => ({ question: q.text, answer: q.answer || '' }));
             const json = JSON.stringify({ items: pairs }, null, 2);
             

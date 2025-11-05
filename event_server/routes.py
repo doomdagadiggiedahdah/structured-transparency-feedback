@@ -4,12 +4,12 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, render_template, request
 
-from event_server.models import SessionState
+from event_server.models import SessionData
 
 bp = Blueprint("main", __name__)
 
 # Global session state (in production, use Redis or similar)
-session_state = SessionState(session_id=os.urandom(16).hex())
+session_state = SessionData(session_id=os.urandom(16).hex())
 
 
 @bp.route("/")
