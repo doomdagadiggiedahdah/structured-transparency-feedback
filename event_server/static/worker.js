@@ -1,4 +1,4 @@
-import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0';
+import { pipeline } from '/static/transformers.js';
 
 let transcriber = null;
 
