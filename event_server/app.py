@@ -200,6 +200,10 @@ admin_html = """<!DOCTYPE html>
             ">
                 <p style="color: #999;">Report will appear here after generation...</p>
             </div>
+            <button onclick="publishToQuartz()" style="margin-top: 15px; background: #4caf50; width: 100%;">
+                📤 Publish to Quartz
+            </button>
+            <div id="publishStatus" style="margin-top: 10px; font-size: 14px; padding: 10px; border-radius: 4px; display: none;"></div>
         </div>
     </div>
 
@@ -214,12 +218,14 @@ admin_html = """<!DOCTYPE html>
         function generateQRCode() {
             const shareLink = generateShareLink();
             const qrContainer = document.getElementById("qrCode");
-            qrContainer.innerHTML = ""; // Clear previous QR code
-            new QRCode(qrContainer, {
-                text: shareLink,
-                width: 200,
-                height: 200
-            });
+            if (qrContainer) {
+                qrContainer.parentElement.innerHTML = '<div id="qrCode"></div>';
+                new QRCode(document.getElementById("qrCode"), {
+                    text: shareLink,
+                    width: 200,
+                    height: 200
+                });
+            }
         }
 
         function loadState() {
@@ -236,7 +242,7 @@ admin_html = """<!DOCTYPE html>
                     // Show report if it exists
                     if (data.generated_report) {
                         document.getElementById("reportCard").style.display = "block";
-                        document.getElementById("reportContent").innerHTML = marked.parse(data.generated_report);
+                        document.getElementById("reportContent").textContent = data.generated_report;
                     } else {
                         document.getElementById("reportCard").style.display = "none";
                     }
@@ -364,15 +370,12 @@ admin_html = """<!DOCTYPE html>
             const btn = event.target;
             const originalText = btn.textContent;
             btn.disabled = true;
-            btn.textContent = "Closing collection...";
+            btn.textContent = "Generating report...";
             btn.style.cursor = "wait";
             
             try {
                 // Close collection
                 await fetch("/api/close-collection", {method: "POST"});
-                
-                // Update button to show generating
-                btn.textContent = "🤖 Generating AI report...";
                 
                 // Generate report
                 const response = await fetch("/api/generate-report", {method: "POST"});
@@ -390,6 +393,57 @@ admin_html = """<!DOCTYPE html>
             } catch (error) {
                 btn.textContent = "Error: " + error.message;
                 btn.style.background = "#f44336";
+                btn.disabled = false;
+            }
+        }
+
+        async function publishToQuartz() {
+            const statusDiv = document.getElementById("publishStatus");
+            const btn = event.target;
+            const originalText = btn.textContent;
+            
+            btn.disabled = true;
+            btn.textContent = "Publishing...";
+            btn.style.cursor = "wait";
+            statusDiv.style.display = "none";
+            
+            try {
+                const response = await fetch("/api/publish-to-quartz", {method: "POST"});
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.textContent = `✓ Published to ${data.path}`;
+                    statusDiv.style.background = "#e8f5e9";
+                    statusDiv.style.color = "#2e7d32";
+                    statusDiv.style.border = "1px solid #4caf50";
+                    btn.textContent = "✓ Published!";
+                    btn.style.background = "#4caf50";
+                } else {
+                    statusDiv.textContent = "Error: " + (data.error || "Unknown error");
+                    statusDiv.style.background = "#ffebee";
+                    statusDiv.style.color = "#c62828";
+                    statusDiv.style.border = "1px solid #f44336";
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }
+                
+                statusDiv.style.display = "block";
+                
+                // Reset button after 3 seconds on success
+                if (data.success) {
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                        btn.style.background = "#4caf50";
+                    }, 3000);
+                }
+            } catch (error) {
+                statusDiv.textContent = "Error: " + error.message;
+                statusDiv.style.background = "#ffebee";
+                statusDiv.style.color = "#c62828";
+                statusDiv.style.border = "1px solid #f44336";
+                statusDiv.style.display = "block";
+                btn.textContent = originalText;
                 btn.disabled = false;
             }
         }
@@ -617,6 +671,83 @@ def generate_report_endpoint():
         return jsonify({"success": False, "error": str(e)}), 500
     except Exception as e:
         return jsonify({"success": False, "error": f"Failed to generate report: {str(e)}"}), 500
+
+@app.route("/api/publish-to-quartz", methods=["POST"])
+def publish_to_quartz():
+    """Publish the generated report to the quartz repository."""
+    import subprocess
+    from pathlib import Path
+    
+    try:
+        if not session_data.generated_report:
+            return jsonify({"success": False, "error": "No report generated yet"}), 400
+        
+        # Configuration
+        quartz_dir = Path("/home/ubuntu/quartz")
+        content_dir = quartz_dir / "content"
+        
+        # Verify quartz repo exists
+        if not quartz_dir.exists() or not (quartz_dir / ".git").exists():
+            return jsonify({"success": False, "error": "Quartz repository not found"}), 500
+        
+        # Create filename with datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"report_{timestamp}.md"
+        filepath = content_dir / filename
+        
+        # Ensure content directory exists
+        content_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Write report to file
+        filepath.write_text(session_data.generated_report, encoding="utf-8")
+        
+        # Git operations
+        try:
+            # Add the file
+            subprocess.run(
+                ["git", "add", str(filepath.relative_to(quartz_dir))],
+                cwd=str(quartz_dir),
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            
+            # Commit with timestamp message
+            commit_msg = f"publish(report): {filename}"
+            subprocess.run(
+                ["git", "commit", "-m", commit_msg],
+                cwd=str(quartz_dir),
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            
+            # Push to remote
+            subprocess.run(
+                ["git", "push"],
+                cwd=str(quartz_dir),
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            
+            return jsonify({
+                "success": True,
+                "filename": filename,
+                "path": str(filepath.relative_to(quartz_dir))
+            })
+            
+        except subprocess.CalledProcessError as e:
+            return jsonify({
+                "success": False,
+                "error": f"Git operation failed: {e.stderr}"
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": f"Failed to publish report: {str(e)}"
+        }), 500
 
 @app.route("/health")
 def health():

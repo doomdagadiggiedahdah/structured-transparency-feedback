@@ -2,6 +2,16 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Install git
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+# Configure git to trust the mounted quartz directory
+RUN git config --global --add safe.directory /home/ubuntu/quartz
+
+# Configure git user for commits
+RUN git config --global user.name "Structured Transparency" && \
+    git config --global user.email "report@struct.lol"
+
 # Copy the entire project structure
 COPY pyproject.toml ./
 COPY README.md ./

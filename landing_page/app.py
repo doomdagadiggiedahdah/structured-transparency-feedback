@@ -452,6 +452,10 @@ def create_session():
             "session-server:latest",
             name=f"session-{session_id}",
             ports={'5000/tcp': port},
+            volumes={
+                '/home/ubuntu/quartz': {'bind': '/home/ubuntu/quartz', 'mode': 'rw'},
+                '/home/ubuntu/.ssh': {'bind': '/root/.ssh', 'mode': 'ro'}
+            },
             environment={
                 'SESSION_ID': session_id,
                 'PORT': '5000',
