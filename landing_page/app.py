@@ -15,7 +15,7 @@ landing_html = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Structured Transparency</title>
+    <title>Prism</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         * {
@@ -154,9 +154,9 @@ landing_html = """
 </head>
 <body>
     <div class="container">
-        <div class="logo">🎯</div>
-        <h1>Structured Transparency</h1>
-        <p class="subtitle">Create authentic feedback sessions with secure,<br>private data collection</p>
+        <div class="logo">🔆</div>
+        <h1>Prism</h1>
+        <p class="subtitle">Information sharing with enforced use boundaries</p>
         <form action="/create-session" method="post">
             <button type="submit">✨ Create New Session</button>
         </form>
