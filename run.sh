@@ -1,6 +1,23 @@
 #!/bin/bash
 # Run structured-transparency services with SSL
 
+# Function to check and start nginx-ssl if not running
+ensure_nginx_running() {
+    if ! docker ps --format '{{.Names}}' | grep -q "^nginx-ssl$"; then
+        echo "nginx-ssl not running, starting it..."
+        docker start nginx-ssl 2>/dev/null || {
+            # If start fails, container doesn't exist, so create it
+            echo "Creating nginx-ssl container..."
+            docker run -d \
+              --network host \
+              -v /home/ubuntu/nginx-ssl/nginx.conf:/etc/nginx/nginx.conf:ro \
+              -v /home/ubuntu/nginx-ssl/certs:/etc/nginx/certs:ro \
+              --name nginx-ssl \
+              nginx:alpine
+        }
+    fi
+}
+
 # Stop and remove existing containers
 docker stop nginx-ssl 2>/dev/null
 docker rm nginx-ssl 2>/dev/null
@@ -40,6 +57,9 @@ docker run -d \
   -v /home/ubuntu/nginx-ssl/certs:/etc/nginx/certs:ro \
   --name nginx-ssl \
   nginx:alpine
+
+# Ensure nginx is running (in case it needs to be checked later)
+ensure_nginx_running
 
 echo ""
 echo "✓ Landing page running on port 5000"
